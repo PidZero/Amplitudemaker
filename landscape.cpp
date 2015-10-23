@@ -1,14 +1,11 @@
 #include "landscape.h"
 Clandscape::Clandscape (string a, int c, int d){
 
-    /*initialise the private variables*/
     name = a;
     n=c;
     L=d;
 
-
-    /*initialize the landscape and
-    read out the data file*/
+    //initialize the fitness landscape 
     fitness.clear();
     linekey.clear();
     fitness.resize(n);
@@ -16,6 +13,7 @@ Clandscape::Clandscape (string a, int c, int d){
     string line;
     ifstream myfile; 
     myfile.exceptions( ifstream::failbit | ifstream::badbit );
+    //try to open the file, specified by the user
     try{
         myfile.open(name.c_str());
     }
@@ -39,7 +37,7 @@ Clandscape::Clandscape (string a, int c, int d){
     myfile.close();
 
 
-    /*calculate adjacency matrix and store it in adjacency*/
+    //calculate the adjacency matrix and store it in adjacency
 
     int h;
     adjacency.resize(n);
@@ -58,6 +56,8 @@ Clandscape::Clandscape (string a, int c, int d){
         }
     }
 }
+
+
 int Clandscape::delta(int a, int b) {
     if(a==b){return(1);}
     else{return(0);}
@@ -83,6 +83,7 @@ double Clandscape::binomial(int n, int k){
     }}}
 }
 
+
 void Clandscape::fit(vector <double> spec, vector < double > &A_o , vector < double > &fit, double tol){
     vector < double > sp;
     vector < double > picks;
@@ -101,6 +102,7 @@ void Clandscape::fit(vector <double> spec, vector < double > &A_o , vector < dou
 
         fit.clear();
         fit.resize(spec.size()-1, 0);
+        //using the gsl, the memory has to be allocated
         gsl_multifit_linear_workspace * work = gsl_multifit_linear_alloc(p_max, picks.size());
         gsl_matrix *X = gsl_matrix_alloc(p_max, picks.size());
         gsl_vector *A = gsl_vector_calloc(picks.size());
@@ -108,6 +110,8 @@ void Clandscape::fit(vector <double> spec, vector < double > &A_o , vector < dou
         gsl_matrix *cov = gsl_matrix_alloc(picks.size(), picks.size());
 
         repeat = false;
+        //Set the values of the function you want to fit, here the Spectrum of 
+        //a generalised LK landscape
         for(size_t i = 0; i < p_max; i++){
             int p = i+1;
             for(size_t j = 0; j < picks.size(); j++){
@@ -115,9 +119,16 @@ void Clandscape::fit(vector <double> spec, vector < double > &A_o , vector < dou
                     pow(2., -picks.at(j))*binomial(picks.at(j), p)
                     );
             }
+            //Set the measured data vector
             gsl_vector_set(s, i, sp.at(i));
         }
+        //multifit performs the fit
         gsl_multifit_linear(X, s, A, cov, &chisq, work);
+        //if contributions of a certain order are too small, they will not be calculated in the 
+        //next round. The tolerance is set by tol. This way, it is possible to reduce
+        //the parameters of the fit A_i. Tol_q is used to get rid of the parameters,
+        //but not all at once, because after one parameter is dropped out, another might gain 
+        //significance
         for(size_t i = 0; i<picks.size(); i++){
             if(gsl_vector_get(A, i) < tol_q){
                 repeat = true;
@@ -145,6 +156,7 @@ void Clandscape::fit(vector <double> spec, vector < double > &A_o , vector < dou
             for(size_t i = 0; i<picks.size(); i++){
                 A_o.at(picks.at(i)-1) = gsl_vector_get(A, i);
             }
+            //Always free gsl stuff.
             gsl_matrix_free(X);
             gsl_matrix_free(cov);
             gsl_vector_free(A);
@@ -156,29 +168,27 @@ void Clandscape::fit(vector <double> spec, vector < double > &A_o , vector < dou
 }
 
 
-//Calculate the spectrum
 vector < double > Clandscape::spectrum(){
+    //The Spectrum is calculated by Eigenvalue Comparison. Again, the gsl needs you to allocate
+    //memory first.
     gsl_vector *fitvec=gsl_vector_alloc(n);
     gsl_vector *specgsl = gsl_vector_alloc(n);
     vector < double > spec;
     vector < double > specout;
-    vector < vector < double > > evalkey; //stores at 0 the 
-    evalkey.resize(L); //eigenvalue and then the positions where the 
-    //same are 
-    double epsilon = 0.00001;  //precision of eigenvalue comparison
+    vector < vector < double > > evalkey;   //stores at 0 the 
+    evalkey.resize(L);                      //eigenvalue and then the positions where the 
+                                            //same are 
+    double epsilon = 0.00001;               //precision of eigenvalue comparison
     double sum;
     gsl_matrix *m=gsl_matrix_alloc(n,n);
     for(int i=0;i<n;i++){
         for(int j=0;j<n;j++){
             gsl_matrix_set(m,i,j,+(double)adjacency[i][j]);
-            //cout<<i<<"\t"<<j<<"\t"<<adjacency.at(i).at(j)<<endl;
         }
         gsl_matrix_set(m,i,i,(double)adjacency[i][i]-(double)L);
         gsl_vector_set(fitvec,i,fitness.at(i));
     }
-/*      
-    Calculate the eigenvectors with the GSL
-    */
+    //Calculate the eigenvectors with the GSL
     gsl_vector *eval = gsl_vector_alloc (n);
     gsl_matrix *evec = gsl_matrix_alloc (n, n);
                 
@@ -188,10 +198,8 @@ vector < double > Clandscape::spectrum(){
     //Sort eigenvectors and eigenvalues simultaneously:
     gsl_eigen_symmv_sort (eval, evec, 
                                     GSL_EIGEN_SORT_VAL_DESC);
-    /*
-    evec contains the eigenvectors as columns, so evec is transposed, multyplied 
-    by 1.0 and fitvec, while 0.0 is added. The result is written in specgsl.
-    */
+    //evec contains the eigenvectors as columns, so evec is transposed, multyplied 
+    //by 1.0 and fitvec, while 0.0 is added. The result is written in specgsl.
     gsl_eigen_symmv_free (w);
     gsl_blas_dgemv( CblasTrans, 1.0, evec, fitvec, 0.0, specgsl );
     spec.clear();
@@ -206,6 +214,7 @@ vector < double > Clandscape::spectrum(){
     int i=0;
     int j;
     specout.resize(L+1,0);
+    //Now, the eigenvalues are compared and the spectrum is calculated
     while(h<L+1){
         j=i;
         while(i<n 

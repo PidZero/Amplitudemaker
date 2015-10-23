@@ -71,7 +71,6 @@ void interactive(){
     cout<<"you can call ./amplitudemaker foo.dat bar"<<endl;
     cout<<endl;
 
-    //name and location of the landscape data file
     cout<<"Please enter the name of the data file: ";
     
     string name;
